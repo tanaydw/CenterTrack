@@ -13,10 +13,102 @@ import numpy as np
 from opts import opts
 from detector import Detector
 
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib.path import Path
+from matplotlib.gridspec import GridSpec
+
 
 image_ext = ['jpg', 'jpeg', 'png', 'webp']
 video_ext = ['mp4', 'mov', 'avi', 'mkv']
 time_stats = ['tot', 'load', 'pre', 'net', 'dec', 'post', 'merge', 'display']
+
+
+def compute_birdviewbox(info_dict, shape, scale):
+  h = info_dict['dim'][0] * scale
+  w = info_dict['dim'][1] * scale
+  l = info_dict['dim'][2] * scale
+  x = info_dict['loc'][0] * scale * 2.0
+  y = info_dict['loc'][1] * scale
+  z = info_dict['loc'][2] * scale
+  rot_y = info_dict['rot_y']
+
+  R = np.array([[-np.cos(rot_y), np.sin(rot_y)],
+                [np.sin(rot_y), np.cos(rot_y)]])
+  t = np.array([x, z]).reshape(1, 2).T
+
+  x_corners = [0, l, l, 0]  # -l/2
+  z_corners = [w, w, 0, 0]  # -w/2
+
+  x_corners += -w / 2
+  z_corners += -l / 2
+
+  # bounding box in object coordinate
+  corners_2D = np.array([x_corners, z_corners])
+
+  # rotate
+  corners_2D = R.dot(corners_2D)
+  
+  # translation
+  corners_2D = t - corners_2D
+  
+  # in camera coordinate
+  corners_2D[0] += int(shape/2)
+  corners_2D = (corners_2D).astype(np.int16)
+  corners_2D = corners_2D.T
+
+  return np.vstack((corners_2D, corners_2D[0,:]))
+
+def draw_birdeyes(ax2, info_dict, shape, scale):
+    pred_corners_2d = compute_birdviewbox(info_dict, shape=shape, scale=scale)
+
+    codes = [Path.LINETO] * pred_corners_2d.shape[0]
+    codes[0] = Path.MOVETO
+    codes[-1] = Path.CLOSEPOLY
+    pth = Path(pred_corners_2d, codes)
+    p = patches.PathPatch(pth, fill=False, color='green', label='prediction')
+    ax2.add_patch(p)
+
+def get_bev(res, opt):
+    fig = plt.figure(figsize=(opt.video_w / 100, opt.video_h / 100), dpi=100)
+    ax2 = fig.add_subplot()
+    
+    shape_w = opt.video_w
+    shape_h = opt.video_h
+    
+    scale = 10
+    birdimage = np.zeros((shape_h, shape_w, 3), np.uint8)
+    
+    for index in range(len(res)):
+        draw_birdeyes(ax2, res[index], shape=shape_w, scale=scale)
+        
+    # plot camera view range
+    x1 = np.linspace(0, shape_w / 2, 100)
+    x2 = np.linspace(shape_w / 2, shape_w, 100)
+    y1 = np.linspace(shape_h / 2, 0, 100)
+    y2 = np.linspace(0, shape_h / 2, 100)
+
+    ax2.plot(x1, y1, ls='--', color='grey', linewidth=1, alpha=0.5)
+    ax2.plot(x2, y2,  ls='--', color='grey', linewidth=1, alpha=0.5)
+    ax2.plot(shape_w / 2, 0, marker='+', markersize=16, markeredgecolor='red')
+        
+    # visualize bird eye view
+    ax2.imshow(birdimage, origin='lower')
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+
+    # redraw the canvas
+    fig.canvas.draw()
+
+    img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+    img  = img.reshape(opt.video_h, opt.video_w, 3)
+
+    # img is rgb, convert to opencv's default bgr
+    img = cv2.cvtColor(img,cv2.COLOR_RGB2BGR)
+    plt.close()
+    
+    return img
+
 
 def demo(opt):
   os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus_str
@@ -54,11 +146,16 @@ def demo(opt):
     out = cv2.VideoWriter('../results/{}.avi'.format(
       opt.exp_id + '_' + out_name),fourcc, opt.save_framerate, (
         opt.video_w, opt.video_h))
+    if opt.bev:
+        out2 = cv2.VideoWriter('../results/{}_bev.avi'.format(
+          opt.exp_id + '_' + out_name),fourcc, opt.save_framerate, (
+            2 * opt.video_w, opt.video_h))
   
   if opt.debug < 5:
     detector.pause = False
   cnt = 0
   results = {}
+  bev_boxes = {} 
 
   while True:
       if is_video:
@@ -98,6 +195,21 @@ def demo(opt):
       # save debug image to video
       if opt.save_video:
         out.write(ret['generic'])
+        
+        if opt.bev:
+            # Getting BEV
+            img = get_bev(results[cnt], opt)
+
+            # Writing to Video
+            rows_rgb, cols_rgb, channels = ret['generic'].shape
+            rows_gray, cols_gray, _ = img.shape
+            rows_comb = max(rows_rgb, rows_gray)
+            cols_comb = cols_rgb + cols_gray
+            comb = np.zeros(shape=(rows_comb, cols_comb, channels), dtype=np.uint8)
+            comb[:rows_rgb, :cols_rgb] = ret['generic']
+            comb[:rows_gray, cols_rgb:] = img
+            out2.write(comb)
+
         if not is_video:
           cv2.imwrite('../results/demo{}.jpg'.format(cnt), ret['generic'])
       
@@ -105,6 +217,8 @@ def demo(opt):
       if cv2.waitKey(1) == 27:
         save_and_exit(opt, out, results, out_name)
         return 
+
+  out2.release()
   save_and_exit(opt, out, results)
 
 
