@@ -172,7 +172,7 @@ class opts(object):
     self.parser.add_argument('--model_output_list', action='store_true',
                              help='Used when convert to onnx')
     self.parser.add_argument('--non_block_test', action='store_true')
-    self.parser.add_argument('--vis_gt_bev', action='store_true')
+    self.parser.add_argument('--vis_gt_bev', default='', help='')
     self.parser.add_argument('--kitti_split', default='3dop',
                              help='different validation split for kitti: '
                                   '3dop | subcnn')
