@@ -1,188 +1,218 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
-import _init_paths
-
-import os
-import sys
+# Added Script for Birds Eye Transformation
 import cv2
-import json
-import copy
 import numpy as np
-from opts import opts
-from detector import Detector
 
-from bev import *
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from matplotlib.path import Path
+from matplotlib.gridspec import GridSpec
+
+import pandas as pd
+from skimage import morphology
+from scipy.ndimage import rotate
 
 
-image_ext = ['jpg', 'jpeg', 'png', 'webp']
-video_ext = ['mp4', 'mov', 'avi', 'mkv']
-time_stats = ['tot', 'load', 'pre', 'net', 'dec', 'post', 'merge', 'display']
-
-def demo(opt):
-    base_dir = '/content/CenterTrack/src/'
-    os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus_str
-    opt.debug = max(opt.debug, 1)
-    detector = Detector(opt)
-
-    if not os.path.exists('./results'):
-        os.makedirs('./results')
-
-    if opt.demo == 'webcam' or \
-        opt.demo[opt.demo.rfind('.') + 1:].lower() in video_ext:
-        is_video = True
-        # demo on video stream
-        cam = cv2.VideoCapture(0 if opt.demo == 'webcam' else opt.demo)
-    else:
-        is_video = False
-        # Demo on images sequences
-        if os.path.isdir(opt.demo):
-            image_names = []
-            ls = os.listdir(opt.demo)
-            for file_name in sorted(ls):
-                ext = file_name[file_name.rfind('.') + 1:].lower()
-                if ext in image_ext:
-                    image_names.append(os.path.join(opt.demo, file_name))
-        else:
-            image_names = [opt.demo]
-
-    # Read Satellite Metadata
-    sat_img = cv2.cvtColor(cv2.imread(base_dir + 'satmap/negley_map_2.png'), cv2.COLOR_BGR2RGB)
-    segmented_image = get_segmented_map(sat_img)
-
-    p1 = (40.46984126496397, -79.93069034546637)
-    p2 = (40.46695644291853, -79.92597035690083)
-    lat_org, long_org, scale_u, scale_v = get_map_vectors(p1, p2, segmented_image)
-
-    csv_1 = pd.read_csv(base_dir + 'satmap/1_1_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
-    csv_2 = pd.read_csv(base_dir + 'satmap/1_2_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
-    csv_3 = pd.read_csv(base_dir + 'satmap/1_3_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
+def get_segmented_map(img):
+    segmented_image = np.zeros(img.shape, dtype=np.uint8)
     
-    csv = pd.concat([csv_1, csv_2, csv_3])
-    csv.reset_index(drop=True, inplace=True)
+    # Defining background color = (254, 204, 165)
+    segmented_image[:, :, 0] = 254
+    segmented_image[:, :, 1] = 204
+    segmented_image[:, :, 2] = 165
 
-    # Transformation
-    csv['longitude'] = csv['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
-    csv['latitude'] = csv['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
+    # Segmenting Road (255, 255, 255)
+    road_mask = (img[:, :, 0] == 255) & (img[:, :, 1] == 255) & (img[:, :, 2] == 255)
+    segmented_image[road_mask, 0] = 219
+    segmented_image[road_mask, 1] = 108
+    segmented_image[road_mask, 2] = 115
 
-    # Initialize output video
-    out = None
-    out_name = opt.demo[opt.demo.rfind('/') + 1:]
-    print('out_name', out_name)
-    if opt.save_video:
-        # fourcc = cv2.VideoWriter_fourcc(*'XVID')
-        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-        out = cv2.VideoWriter('./results/{}.avi'.format(
-            opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (
-            opt.video_w, opt.video_h))
-
-    if opt.debug < 5:
-        detector.pause = False
-    cnt = 0
-    results = {}
-
-    while True:
-        if is_video:
-            _, img = cam.read()
-            if img is None:
-                save_and_exit(opt, out, results, out_name)
-            img = undistort_image(img)
-        else:
-            if cnt < len(image_names):
-                img = cv2.imread(image_names[cnt])
-            else:
-                save_and_exit(opt, out, results, out_name)
-        cnt += 1
-
-        # resize the original video for saving video results
-        if opt.resize_video:
-            img = cv2.resize(img, (opt.video_w, opt.video_h))
-
-        # skip the first X frames of the video
-        if cnt < opt.skip_first:
-            continue
-
-        # CHANGE: Commented below line for Colab Compactibility
-        # cv2.imshow('input', img)
-
-        # track or detect the image.
-        ret = detector.run(img)
-
-        # log run time
-        time_str = 'frame {} |'.format(cnt)
-        for stat in time_stats:
-            time_str = time_str + '{} {:.3f}s |'.format(stat, ret[stat])
-        print(time_str)
-
-        # results[cnt] is a list of dicts:
-        #  [{'bbox': [x1, y1, x2, y2], 'tracking_id': id, 'category_id': c, ...}]
-        results[cnt] = ret['results']
-
-        # save debug image to video
-        if opt.save_video:
-            out.write(ret['generic'])
-
-            # CHANGE: Added 'if' statement for Bird's Eye Transformation
-            if opt.bev:
-                # Getting BEV
-                scale = 30
-                theta = 115
-                dst_x, dst_z = 1000, 2500
-                latitude, longitude = csv.loc[cnt-1, 'latitude'], csv.loc[cnt-1, 'longitude']
-                birdimage = get_patch(segmented_image, latitude, longitude, 180 + theta, dst_x, dst_z)
-                img = get_bev(results[cnt], opt, scale, birdimage)
-
-                # Writing to Video
-                rows_rgb, cols_rgb, channels = ret['generic'].shape
-                rows_gray, cols_gray, _ = img.shape
-                rows_comb = max(rows_rgb, rows_gray)
-                cols_comb = cols_rgb + cols_gray
-                comb = np.zeros(shape=(rows_comb, cols_comb, channels), dtype=np.uint8)
-                comb[:rows_rgb, :cols_rgb] = ret['generic']
-                comb[:rows_gray, cols_rgb:] = img
-
-                try:
-                    out2.write(comb)
-                except:
-                    vw, vh = comb.shape[0], comb.shape[1]
-                    fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-                    out2 = cv2.VideoWriter('./results/{}_bev.avi'.format(
-                        opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (vh, vw))
-                    out2.write(comb)
-
-            if not is_video:
-                cv2.imwrite('./results/demo{}.jpg'.format(cnt), ret['generic'])
-
-        # esc to quit and finish saving video
-        if cv2.waitKey(1) == 27:
-            save_and_exit(opt, out, results, out_name)
-            return
-
-    out2.release()
-    save_and_exit(opt, out, results)
+    # Segmenting Buildings (241, 241, 241)
+    build_mask = (img[:, :, 0] == 241) & (img[:, :, 1] == 241) & (img[:, :, 2] == 241)
+    """n_opt = 3
+    for _ in range(n_opt):
+        build_mask = morphology.binary_erosion(build_mask)
+    for _ in range(n_opt):
+        build_mask = morphology.binary_dilation(build_mask)"""
+    segmented_image[build_mask, 0] = 254
+    segmented_image[build_mask, 1] = 137
+    segmented_image[build_mask, 2] = 9
+    
+    return segmented_image
 
 
-def save_and_exit(opt, out=None, results=None, out_name=''):
-    if opt.save_results and (results is not None):
-        save_dir = './results/{}_results.json'.format(opt.exp_id + '_' + out_name)
-        print('saving results to', save_dir)
-        json.dump(_to_list(copy.deepcopy(results)),
-                  open(save_dir, 'w'))
-    if opt.save_video and out is not None:
-        out.release()
-    sys.exit(0)
+def get_map_vectors(p1, p2, img):
+    u1, v1 = 0, 0
+    u2, v2 = img.shape[1], img.shape[0]
+    lat1, long1 = p1
+    lat2, long2 = p2
+
+    scale_u = (long1 - long2) / (u1 - u2)
+    scale_v = (lat1 - lat2) / (v1 - v2)
+
+    lat_org = lat1 - scale_v * v1
+    long_org = long1 - scale_u * u1
+    
+    return lat_org, long_org, scale_u, scale_v
 
 
-def _to_list(results):
-    for img_id in results:
-        for t in range(len(results[img_id])):
-            for k in results[img_id][t]:
-                if isinstance(results[img_id][t][k], (np.ndarray, np.float32)):
-                    results[img_id][t][k] = results[img_id][t][k].tolist()
-    return results
+def get_u(x, long_org, scale_u):
+    return int((x - long_org) / scale_u)
 
 
-if __name__ == '__main__':
-    opt = opts().init()
-    demo(opt)
+def get_v(x, lat_org, scale_v):
+    return int((x - lat_org) / scale_v)
+
+
+def autocrop(image, threshold=0):
+    """
+    Crops any edges below or equal to threshold
+    Crops blank image to 1x1.
+    Returns cropped image.
+    """
+    if len(image.shape) == 3:
+        flatImage = np.max(image, 2)
+    else:
+        flatImage = image
+    assert len(flatImage.shape) == 2
+
+    rows = np.where(np.max(flatImage, 0) > threshold)[0]
+    if rows.size:
+        cols = np.where(np.max(flatImage, 1) > threshold)[0]
+        image = image[cols[0]: cols[-1] + 1, rows[0]: rows[-1] + 1]
+    else:
+        image = image[:1, :1]
+    return image
+
+
+def get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z):
+    angle = np.deg2rad(theta)
+    
+    # Transforming Coordinates
+    x, z = longitude, latitude 
+    corner4 = np.array([[-dst_x, 0],
+                        [ dst_x, 0], 
+                        [ dst_x, dst_z], 
+                        [-dst_x, dst_z]])
+
+    R = np.array([[np.cos(angle), -np.sin(angle)],
+                [np.sin(angle), np.cos(angle)]])
+
+    corner4t = np.dot(R, corner4.T).T
+    corner4t[:, 0] = corner4t[:, 0] + x
+    corner4t[:, 1] = corner4t[:, 1] + z
+
+    min_x, min_z = np.min(corner4t, axis=0)
+    max_x, max_z = np.max(corner4t, axis=0)
+
+    roi = segmented_image[int(min_z):int(max_z), int(min_x):int(max_x)]
+
+    corner4t[:, 0] = corner4t[:, 0] - min_x
+    corner4t[:, 1] = corner4t[:, 1] - min_z
+
+    mask = np.zeros(roi.shape[:2], np.uint8)
+    cv2.drawContours(mask, [corner4t.astype(int)], -1, (255, 255, 255), -1, cv2.LINE_AA)
+    roit = cv2.bitwise_and(roi, roi, mask=mask)
+    roit = rotate(roit, theta)
+    roit = autocrop(roit)
+    return np.flip(roit, axis=1)
+
+def compute_birdviewbox(info_dict, shape, scale):
+    h = info_dict['dim'][0] * scale
+    w = info_dict['dim'][1] * scale
+    l = info_dict['dim'][2] * scale
+    x = info_dict['loc'][0] * scale
+    y = info_dict['loc'][1] * scale
+    z = info_dict['loc'][2] * scale
+    rot_y = info_dict['rot_y']
+
+    R = np.array([[-np.cos(rot_y), np.sin(rot_y)],
+                  [np.sin(rot_y), np.cos(rot_y)]])
+    t = np.array([x, z]).reshape(1, 2).T
+
+    x_corners = [0, l, l, 0]  # -l/2
+    z_corners = [w, w, 0, 0]  # -w/2
+
+    x_corners += -w / 2
+    z_corners += -l / 2
+
+    # bounding box in object coordinate
+    corners_2D = np.array([x_corners, z_corners])
+
+    # rotate
+    corners_2D = R.dot(corners_2D)
+
+    # translation
+    corners_2D = t - corners_2D
+
+    # in camera coordinate
+    corners_2D[0] += int(shape / 2)
+    corners_2D = (corners_2D).astype(np.int16)
+    corners_2D = corners_2D.T
+
+    return np.vstack((corners_2D, corners_2D[0, :]))
+
+
+def draw_birdeyes(ax2, info_dict, shape, scale):
+    pred_corners_2d = compute_birdviewbox(info_dict, shape=shape, scale=scale)
+    codes = [Path.LINETO] * pred_corners_2d.shape[0]
+    codes[0] = Path.MOVETO
+    codes[-1] = Path.CLOSEPOLY
+    pth = Path(pred_corners_2d, codes)
+    p = patches.PathPatch(pth, fill=True, color='black', label='prediction')
+    ax2.add_patch(p)
+
+
+def get_bev(res, opt, scale, birdimage):
+    shape_h = birdimage.shape[0]
+    shape_w = birdimage.shape[1]
+
+    fig = plt.figure(figsize=(shape_w/100, shape_h/100))
+    ax2 = fig.add_subplot()
+
+    for index in range(len(res)):
+        draw_birdeyes(ax2, res[index], shape=shape_w, scale=scale)
+
+    # plot camera view range
+    x1 = np.linspace(0, shape_w / 2, 100)
+    x2 = np.linspace(shape_w / 2, shape_w, 100)
+    y1 = np.linspace(shape_h / 2, 0, 100)
+    y2 = np.linspace(0, shape_h / 2, 100)
+
+    ax2.plot(x1, y1, ls='--', color='grey', linewidth=1, alpha=10)
+    ax2.plot(x2, y2, ls='--', color='grey', linewidth=1, alpha=10)
+    ax2.plot(shape_w / 2, 0, marker='+', markersize=16, markeredgecolor='black')
+
+    # visualize bird eye view
+    ax2.imshow(birdimage, origin='lower')
+    ax2.set_xticks([])
+    ax2.set_yticks([])
+    
+    # redraw the canvas
+    fig.canvas.draw()
+
+    img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
+    img = img.reshape(shape_h, shape_w, 3)
+
+    # img is rgb, convert to opencv's default bgr
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+    plt.close()
+
+    return img
+
+
+def undistort_image(img):
+    """
+    A custom function to undistort image
+    just for Negeley-Black Video.
+    """
+    h, w = img.shape[:2]
+    mtx = np.array([
+        [3389.14855, 0, 982.985434],
+        [0, 3784.14471, 556.363307],
+        [0, 0, 1]]
+    )
+    dist = np.array([-1.83418584,  12.2930625, -0.00434882103,  0.0226389517, -85.1805652])
+
+    # undistort
+    img = cv2.undistort(img, mtx, dist)
+    return img
