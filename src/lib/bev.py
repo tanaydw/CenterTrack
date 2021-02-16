@@ -63,8 +63,7 @@ def get_v(x, lat_org, scale_v):
     return int((x - lat_org) / scale_v)
 
 
-def get_patch(segmented_image, latitude, longitude, idx, theta):
-    dst_x, dst_z = 1000, 2500
+def get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z):
     angle = np.deg2rad(180 + theta)
     
     # Transforming Coordinates
@@ -95,16 +94,16 @@ def get_patch(segmented_image, latitude, longitude, idx, theta):
     roit = rotate(roit, theta)
 
     # Removing extra gray Area around image
-    gray = cv2.cvtColor(roit, cv2.COLOR_BGR2GRAY)
+    gray = cv2.cvtColor(roit, cv2.COLOR_RGB2GRAY)
     _, thresh = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
-    contours,_ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     xt, yt, w, h = cv2.boundingRect(contours[0])
     roit = roit[:yt, :xt]
 
     roit = rotate(roit, 180)
     gray = cv2.cvtColor(roit, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
-    contours,_ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    _, contours,_ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     xt, yt, w, h = cv2.boundingRect(contours[0])
     roit = roit[:yt, :xt]
     roit = rotate(roit, 180)
@@ -116,7 +115,7 @@ def compute_birdviewbox(info_dict, shape, scale):
     h = info_dict['dim'][0] * scale
     w = info_dict['dim'][1] * scale
     l = info_dict['dim'][2] * scale
-    x = info_dict['loc'][0] * scale * 2.0
+    x = info_dict['loc'][0] * scale
     y = info_dict['loc'][1] * scale
     z = info_dict['loc'][2] * scale
     rot_y = info_dict['rot_y']
@@ -150,20 +149,21 @@ def compute_birdviewbox(info_dict, shape, scale):
 
 def draw_birdeyes(ax2, info_dict, shape, scale):
     pred_corners_2d = compute_birdviewbox(info_dict, shape=shape, scale=scale)
-
     codes = [Path.LINETO] * pred_corners_2d.shape[0]
     codes[0] = Path.MOVETO
     codes[-1] = Path.CLOSEPOLY
     pth = Path(pred_corners_2d, codes)
-    p = patches.PathPatch(pth, fill=True, color='orange', label='prediction')
+    p = patches.PathPatch(pth, fill=True, color='black', label='prediction')
     ax2.add_patch(p)
 
 
-def get_bev(res, opt, segmented_image, latitude, longitude, cnt, theta):
-    scale = 15
-    birdimage = get_patch(segmented_image, latitude, longitude, cnt, theta)
-    
-    fig = plt.figure(figsize=birdimage.shape[:2] / 100)
+def get_bev(res, opt, segmented_image, latitude, longitude, theta, scale, dst_x, dst_z):
+    birdimage = get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z)
+
+    shape_h = birdimage.shape[0]
+    shape_w = birdimage.shape[1]
+
+    fig = plt.figure(figsize=(shape_w/100, shape_h/100))
     ax2 = fig.add_subplot()
 
     for index in range(len(res)):
@@ -177,18 +177,18 @@ def get_bev(res, opt, segmented_image, latitude, longitude, cnt, theta):
 
     ax2.plot(x1, y1, ls='--', color='grey', linewidth=1, alpha=10)
     ax2.plot(x2, y2, ls='--', color='grey', linewidth=1, alpha=10)
-    ax2.plot(shape_w / 2, 0, marker='+', markersize=16, markeredgecolor='red')
+    ax2.plot(shape_w / 2, 0, marker='+', markersize=16, markeredgecolor='black')
 
     # visualize bird eye view
     ax2.imshow(birdimage, origin='lower')
     ax2.set_xticks([])
     ax2.set_yticks([])
-
+    
     # redraw the canvas
     fig.canvas.draw()
 
     img = np.fromstring(fig.canvas.tostring_rgb(), dtype=np.uint8, sep='')
-    img = img.reshape(opt.video_h, opt.video_w, 3)
+    img = img.reshape(shape_h, shape_w, 3)
 
     # img is rgb, convert to opencv's default bgr
     img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
