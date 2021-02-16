@@ -63,6 +63,27 @@ def get_v(x, lat_org, scale_v):
     return int((x - lat_org) / scale_v)
 
 
+def autocrop(image, threshold=0):
+    """
+    Crops any edges below or equal to threshold
+    Crops blank image to 1x1.
+    Returns cropped image.
+    """
+    if len(image.shape) == 3:
+        flatImage = np.max(image, 2)
+    else:
+        flatImage = image
+    assert len(flatImage.shape) == 2
+
+    rows = np.where(np.max(flatImage, 0) > threshold)[0]
+    if rows.size:
+        cols = np.where(np.max(flatImage, 1) > threshold)[0]
+        image = image[cols[0]: cols[-1] + 1, rows[0]: rows[-1] + 1]
+    else:
+        image = image[:1, :1]
+    return image
+
+
 def get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z):
     angle = np.deg2rad(180 + theta)
     
@@ -92,24 +113,9 @@ def get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z):
     cv2.drawContours(mask, [corner4t.astype(int)], -1, (255, 255, 255), -1, cv2.LINE_AA)
     roit = cv2.bitwise_and(roi, roi, mask=mask)
     roit = rotate(roit, theta)
-
-    # Removing extra gray Area around image
-    gray = cv2.cvtColor(roit, cv2.COLOR_RGB2GRAY)
-    _, thresh = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
-    _, contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    xt, yt, w, h = cv2.boundingRect(contours[0])
-    roit = roit[:yt, :xt]
-
-    roit = rotate(roit, 180)
-    gray = cv2.cvtColor(roit, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
-    _, contours,_ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    xt, yt, w, h = cv2.boundingRect(contours[0])
-    roit = roit[:yt, :xt]
-    roit = rotate(roit, 180)
+    roit = autocrop(roit)
 
     return roit
-
 
 def compute_birdviewbox(info_dict, shape, scale):
     h = info_dict['dim'][0] * scale

@@ -51,8 +51,8 @@ def demo(opt):
     sat_img = cv2.cvtColor(cv2.imread(base_dir + 'satmap/negley_map_2.png'), cv2.COLOR_BGR2RGB)
     segmented_image = get_segmented_map(sat_img)
 
-    p1 = (40.469862, -79.930679)
-    p2 = (40.466952, -79.926014)
+    p1 = (40.46984126496397, -79.93069034546637)
+    p2 = (40.46695644291853, -79.92597035690083)
     lat_org, long_org, scale_u, scale_v = get_map_vectors(p1, p2, sat_img)
 
     csv_1 = pd.read_csv(base_dir + 'satmap/1_1_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
@@ -79,12 +79,6 @@ def demo(opt):
         out = cv2.VideoWriter('./results/{}.avi'.format(
             opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (
             opt.video_w, opt.video_h))
-
-        # CHANGE: Added if statement for Bird's Eye Transformation
-        if opt.bev:
-            out2 = cv2.VideoWriter('./results/{}_bev.avi'.format(
-                opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (
-                2 * opt.video_w, opt.video_h))
 
     if opt.debug < 5:
         detector.pause = False
@@ -150,9 +144,14 @@ def demo(opt):
                 comb = np.zeros(shape=(rows_comb, cols_comb, channels), dtype=np.uint8)
                 comb[:rows_rgb, :cols_rgb] = ret['generic']
                 comb[:rows_gray, cols_rgb:] = img
-                cv2.imwrite('./results/demo_{}.jpg'.format(cnt), comb)
-                print('done')
-                break
+
+                # CHANGE: Added if statement for Bird's Eye Transformation
+                vw, vh = comb.shape[0], comb.shape[1]
+                if cnt == 1:
+                    fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+                    out2 = cv2.VideoWriter('./results/{}_bev.avi'.format(
+                        opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (vh, vw))
+                out2.write(comb)
 
             if not is_video:
                 cv2.imwrite('./results/demo{}.jpg'.format(cnt), ret['generic'])
