@@ -13,14 +13,10 @@ import numpy as np
 from opts import opts
 from detector import Detector
 
-# CHANGE: Added Script for Birds Eye Transformation
-from bev import *
-
 
 image_ext = ['jpg', 'jpeg', 'png', 'webp']
 video_ext = ['mp4', 'mov', 'avi', 'mkv']
 time_stats = ['tot', 'load', 'pre', 'net', 'dec', 'post', 'merge', 'display']
-
 
 def demo(opt):
     os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus_str
@@ -47,6 +43,28 @@ def demo(opt):
                     image_names.append(os.path.join(opt.demo, file_name))
         else:
             image_names = [opt.demo]
+
+    # Read Satellite Metadata
+    sat_img = cv2.cvtColor(cv2.imread('satmap/negley_map_2.png'), cv2.COLOR_BGR2RGB)
+    segmented_image = get_segmented_map(img)
+
+    p1 = (40.469862, -79.930679)
+    p2 = (40.466952, -79.926014)
+    lat_org, long_org, scale_u, scale_v = get_map_vectors(p1, p2, img)
+
+    csv_1 = pd.read_csv('satmap/1_1_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
+    csv_2 = pd.read_csv('satmap/1_2_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
+    csv_3 = pd.read_csv('satmap/1_3_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
+
+    # Transformation
+    csv_1['longitude'] = csv_1['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
+    csv_1['latitude'] = csv_1['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
+
+    csv_2['longitude'] = csv_2['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
+    csv_2['latitude'] = csv_2['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
+
+    csv_3['longitude'] = csv_3['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
+    csv_3['latitude'] = csv_3['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
 
     # Initialize output video
     out = None
@@ -114,7 +132,10 @@ def demo(opt):
             # CHANGE: Added 'if' statement for Bird's Eye Transformation
             if opt.bev:
                 # Getting BEV
-                img = get_bev(results[cnt], opt)
+
+                theta = 115
+                latitude, longitude = csv_1.loc[cnt, 'latitude'], csv_1.loc[cnt, 'longitude']
+                img = get_bev(results[cnt], opt, segmented_image, latitude, longitude, cnt, theta)
 
                 # Writing to Video
                 rows_rgb, cols_rgb, channels = ret['generic'].shape

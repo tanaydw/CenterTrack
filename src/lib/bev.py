@@ -7,6 +7,110 @@ import matplotlib.patches as patches
 from matplotlib.path import Path
 from matplotlib.gridspec import GridSpec
 
+import pandas as pd
+from skimage import morphology
+from scipy.ndimage import rotate
+
+
+def get_segmented_map(img):
+    segmented_image = np.zeros(img.shape, dtype=np.uint8)
+    
+    # Defining background color = (254, 204, 165)
+    segmented_image[:, :, 0] = 254
+    segmented_image[:, :, 1] = 204
+    segmented_image[:, :, 2] = 165
+
+    # Segmenting Road (255, 255, 255)
+    road_mask = (img[:, :, 0] == 255) & (img[:, :, 1] == 255) & (img[:, :, 2] == 255)
+    segmented_image[road_mask, 0] = 219
+    segmented_image[road_mask, 1] = 108
+    segmented_image[road_mask, 2] = 115
+
+    # Segmenting Buildings (241, 241, 241)
+    build_mask = (img[:, :, 0] == 241) & (img[:, :, 1] == 241) & (img[:, :, 2] == 241)
+    """n_opt = 3
+    for _ in range(n_opt):
+        build_mask = morphology.binary_erosion(build_mask)
+    for _ in range(n_opt):
+        build_mask = morphology.binary_dilation(build_mask)"""
+    segmented_image[build_mask, 0] = 254
+    segmented_image[build_mask, 1] = 137
+    segmented_image[build_mask, 2] = 9
+    
+    return segmented_image
+
+
+def get_map_vectors(p1, p2, img):
+    u1, v1 = 0, 0
+    u2, v2 = img.shape[1], img.shape[0]
+    lat1, long1 = p1
+    lat2, long2 = p2
+
+    scale_u = (long1 - long2) / (u1 - u2)
+    scale_v = (lat1 - lat2) / (v1 - v2)
+
+    lat_org = lat1 - scale_v * v1
+    long_org = long1 - scale_u * u1
+    
+    return lat_org, long_org, scale_u, scale_v
+
+
+def get_u(x, long_org, scale_u):
+    return int((x - long_org) / scale_u)
+
+
+def get_v(x, lat_org, scale_v):
+    return int((x - lat_org) / scale_v)
+
+
+def get_patch(segmented_image, latitude, longitude, idx, theta):
+    dst_x, dst_z = 1000, 2500
+    angle = np.deg2rad(180 + theta)
+    
+    # Transforming Coordinates
+    x, z = longitude, latitude 
+    corner4 = np.array([[-dst_x, 0],
+                        [ dst_x, 0], 
+                        [ dst_x, dst_z], 
+                        [-dst_x, dst_z]])
+
+    R = np.array([[np.cos(angle), -np.sin(angle)],
+                [np.sin(angle), np.cos(angle)]])
+
+    corner4t = np.floor(np.dot(R, corner4.T)).T
+    corner4t[:, 0] = corner4t[:, 0] + x
+    corner4t[:, 1] = corner4t[:, 1] + z
+
+    min_x, min_z = np.min(corner4t, axis=0)
+    max_x, max_z = np.max(corner4t, axis=0)
+
+    roi = segmented_image[int(min_z):int(max_z), int(min_x):int(max_x)]
+
+    corner4t[:, 0] = corner4t[:, 0] - min_x
+    corner4t[:, 1] = corner4t[:, 1] - min_z
+
+    mask = np.zeros(roi.shape[:2], np.uint8)
+    cv2.drawContours(mask, [corner4t.astype(int)], -1, (255, 255, 255), -1, cv2.LINE_AA)
+    roit = cv2.bitwise_and(roi, roi, mask=mask)
+    roit = rotate(roit, theta)
+
+    # Removing extra gray Area around image
+    gray = cv2.cvtColor(roit, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
+    contours,_ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    xt, yt, w, h = cv2.boundingRect(contours[0])
+    roit = roit[:yt, :xt]
+
+    roit = rotate(roit, 180)
+    gray = cv2.cvtColor(roit, cv2.COLOR_BGR2GRAY)
+    _, thresh = cv2.threshold(gray, 1, 255, cv2.THRESH_BINARY)
+    contours,_ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    xt, yt, w, h = cv2.boundingRect(contours[0])
+    roit = roit[:yt, :xt]
+    roit = rotate(roit, 180)
+
+    return roit
+
 
 def compute_birdviewbox(info_dict, shape, scale):
     h = info_dict['dim'][0] * scale
@@ -55,15 +159,12 @@ def draw_birdeyes(ax2, info_dict, shape, scale):
     ax2.add_patch(p)
 
 
-def get_bev(res, opt):
-    fig = plt.figure(figsize=(opt.video_w / 100, opt.video_h / 100), dpi=100)
-    ax2 = fig.add_subplot()
-
-    shape_w = opt.video_w
-    shape_h = opt.video_h
-
+def get_bev(res, opt, segmented_image, latitude, longitude, cnt, theta):
     scale = 15
-    birdimage = np.zeros((shape_h, shape_w, 3), np.uint8)
+    birdimage = get_patch(segmented_image, latitude, longitude, cnt, theta)
+    
+    fig = plt.figure(figsize=birdimage.shape[:2] / 100)
+    ax2 = fig.add_subplot()
 
     for index in range(len(res)):
         draw_birdeyes(ax2, res[index], shape=shape_w, scale=scale)
