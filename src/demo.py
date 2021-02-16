@@ -53,21 +53,18 @@ def demo(opt):
 
     p1 = (40.46984126496397, -79.93069034546637)
     p2 = (40.46695644291853, -79.92597035690083)
-    lat_org, long_org, scale_u, scale_v = get_map_vectors(p1, p2, sat_img)
+    lat_org, long_org, scale_u, scale_v = get_map_vectors(p1, p2, segmented_image)
 
     csv_1 = pd.read_csv(base_dir + 'satmap/1_1_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
     csv_2 = pd.read_csv(base_dir + 'satmap/1_2_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
     csv_3 = pd.read_csv(base_dir + 'satmap/1_3_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
+    
+    csv = pd.concat([csv_1, csv_2, csv_3])
+    csv.reset_index(drop=True, inplace=True)
 
     # Transformation
-    csv_1['longitude'] = csv_1['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
-    csv_1['latitude'] = csv_1['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
-
-    csv_2['longitude'] = csv_2['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
-    csv_2['latitude'] = csv_2['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
-
-    csv_3['longitude'] = csv_3['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
-    csv_3['latitude'] = csv_3['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
+    csv['longitude'] = csv['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
+    csv['latitude'] = csv['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
 
     # Initialize output video
     out = None
@@ -132,7 +129,7 @@ def demo(opt):
                 scale = 30
                 theta = 115
                 dst_x, dst_z = 1000, 2500
-                latitude, longitude = csv_1.loc[cnt-1, 'latitude'], csv_1.loc[cnt-1, 'longitude']
+                latitude, longitude = csv.loc[cnt-1, 'latitude'], csv.loc[cnt-1, 'longitude']
                 
                 img = get_bev(results[cnt], opt, segmented_image, latitude, longitude, theta, scale, dst_x, dst_z)
 

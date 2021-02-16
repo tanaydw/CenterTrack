@@ -97,7 +97,7 @@ def get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z):
     R = np.array([[np.cos(angle), -np.sin(angle)],
                 [np.sin(angle), np.cos(angle)]])
 
-    corner4t = np.floor(np.dot(R, corner4.T)).T
+    corner4t = np.dot(R, corner4.T).T
     corner4t[:, 0] = corner4t[:, 0] + x
     corner4t[:, 1] = corner4t[:, 1] + z
 
@@ -114,7 +114,6 @@ def get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z):
     roit = cv2.bitwise_and(roi, roi, mask=mask)
     roit = rotate(roit, theta)
     roit = autocrop(roit)
-
     return roit
 
 def compute_birdviewbox(info_dict, shape, scale):
