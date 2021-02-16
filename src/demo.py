@@ -130,8 +130,8 @@ def demo(opt):
                 theta = 115
                 dst_x, dst_z = 1000, 2500
                 latitude, longitude = csv.loc[cnt-1, 'latitude'], csv.loc[cnt-1, 'longitude']
-                
-                img = get_bev(results[cnt], opt, segmented_image, latitude, longitude, theta, scale, dst_x, dst_z)
+                birdimage = get_patch(segmented_image, latitude, longitude, 180 + theta, dst_x, dst_z)
+                img = get_bev(results[cnt], opt, scale, birdimage)
 
                 # Writing to Video
                 rows_rgb, cols_rgb, channels = ret['generic'].shape
@@ -142,13 +142,14 @@ def demo(opt):
                 comb[:rows_rgb, :cols_rgb] = ret['generic']
                 comb[:rows_gray, cols_rgb:] = img
 
-                # CHANGE: Added if statement for Bird's Eye Transformation
-                vw, vh = comb.shape[0], comb.shape[1]
-                if cnt == 1:
+                try:
+                    out2.write(comb)
+                except:
+                    vw, vh = comb.shape[0], comb.shape[1]
                     fourcc = cv2.VideoWriter_fourcc(*'MJPG')
                     out2 = cv2.VideoWriter('./results/{}_bev.avi'.format(
                         opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (vh, vw))
-                out2.write(comb)
+                    out2.write(comb)
 
             if not is_video:
                 cv2.imwrite('./results/demo{}.jpg'.format(cnt), ret['generic'])
