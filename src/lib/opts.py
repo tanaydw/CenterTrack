@@ -15,6 +15,8 @@ class opts(object):
                              '| tracking or combined with ,')
     self.parser.add_argument('--csv', type=int, default=2, 
                              help='number of csv files')
+    self.parser.add_argument('--fpts', type=int, default=10, 
+                             help='number of future points')
     self.parser.add_argument('--base_dir', default='/content/drive/MyDrive/CVCollection/models/SatelliteMapping/',
                              help='base directory for CSV files and Map files')
     self.parser.add_argument('--dataset', default='coco',

@@ -97,7 +97,7 @@ def demo(opt):
     while True:
         if is_video:
             _, img = cam.read()
-            if img is None or cnt == cnt_max - 1:
+            if img is None or cnt == cnt_max - opt.fpts - 1:
                 save_and_exit(opt, out, results, out_name)
             img = undistort_image(img)
         else:
@@ -140,7 +140,7 @@ def demo(opt):
                 # Getting BEV
                 scale = 30
                 dst_x, dst_z = 1000, 2500
-                theta = 90 - slope_calculator(csv.loc[idx:idx+10, 'longitude'].to_numpy(), csv.loc[idx:idx+10, 'latitude'].to_numpy(), pow=10)
+                theta = 90 - slope_calculator(csv.loc[cnt:cnt+opt.fpts, 'longitude'].to_numpy(), csv.loc[cnt:cnt+opt.fpts, 'latitude'].to_numpy(), pow=opt.fpts)
                 latitude, longitude = csv.loc[cnt-1, 'latitude'], csv.loc[cnt-1, 'longitude']
                 birdimage = get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z)
                 img = get_bev(results[cnt], opt, scale, birdimage)
