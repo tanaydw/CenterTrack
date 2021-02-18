@@ -14,11 +14,21 @@ from opts import opts
 from detector import Detector
 
 from bev import *
-
+import warnings
+warnings.simplefilter('ignore', np.RankWarning)
 
 image_ext = ['jpg', 'jpeg', 'png', 'webp']
 video_ext = ['mp4', 'mov', 'avi', 'mkv']
 time_stats = ['tot', 'load', 'pre', 'net', 'dec', 'post', 'merge', 'display']
+
+
+def slope_calculator(x, y, pow=3):
+    p = np.polyfit(x, y, pow)
+    slope = 0
+    for i in range(pow):
+        slope += (pow - i) * p[i] * (x[0] ** (pow - i - 1))
+    return np.rad2deg(np.arctan(slope))
+
 
 def demo(opt):
     base_dir = '/content/CenterTrack/src/'
@@ -48,23 +58,24 @@ def demo(opt):
             image_names = [opt.demo]
 
     # Read Satellite Metadata
-    sat_img = cv2.cvtColor(cv2.imread(base_dir + 'satmap/negley_map_2.png'), cv2.COLOR_BGR2RGB)
+    sat_img = cv2.cvtColor(cv2.imread(opt.base_dir + 'negley_map_2.png'), cv2.COLOR_BGR2RGB)
     segmented_image = get_segmented_map(sat_img)
 
+    # MANUAL
     p1 = (40.46984126496397, -79.93069034546637)
     p2 = (40.46695644291853, -79.92597035690083)
     lat_org, long_org, scale_u, scale_v = get_map_vectors(p1, p2, segmented_image)
 
-    csv_1 = pd.read_csv(base_dir + 'satmap/1_1_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
-    csv_2 = pd.read_csv(base_dir + 'satmap/1_2_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
-    csv_3 = pd.read_csv(base_dir + 'satmap/1_3_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']]
-    
-    csv = pd.concat([csv_1, csv_2, csv_3])
+    csv_list = []
+    for i in range(opt.csv):
+        csv_list.append(pd.read_csv(opt.base_dir + '1_' + str(i+1) + '_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']])
+    csv = pd.concat(csv_list)
     csv.reset_index(drop=True, inplace=True)
 
     # Transformation
-    csv['longitude'] = csv['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
-    csv['latitude'] = csv['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
+    csvt = csv.copy()
+    csvt['longitude'] = csvt['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
+    csvt['latitude'] = csvt['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
 
     # Initialize output video
     out = None
@@ -80,12 +91,13 @@ def demo(opt):
     if opt.debug < 5:
         detector.pause = False
     cnt = 0
+    cnt_max = csv.shape[0]
     results = {}
 
     while True:
         if is_video:
             _, img = cam.read()
-            if img is None:
+            if img is None or cnt == cnt_max - 1:
                 save_and_exit(opt, out, results, out_name)
             img = undistort_image(img)
         else:
@@ -127,10 +139,10 @@ def demo(opt):
             if opt.bev:
                 # Getting BEV
                 scale = 30
-                theta = 115
                 dst_x, dst_z = 1000, 2500
+                theta = 90 - slope_calculator(csv.loc[idx:idx+10, 'longitude'].to_numpy(), csv.loc[idx:idx+10, 'latitude'].to_numpy(), pow=10)
                 latitude, longitude = csv.loc[cnt-1, 'latitude'], csv.loc[cnt-1, 'longitude']
-                birdimage = get_patch(segmented_image, latitude, longitude, 180 + theta, dst_x, dst_z)
+                birdimage = get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z)
                 img = get_bev(results[cnt], opt, scale, birdimage)
 
                 # Writing to Video

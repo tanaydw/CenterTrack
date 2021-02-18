@@ -13,6 +13,10 @@ class opts(object):
     self.parser.add_argument('task', default='',
                              help='ctdet | ddd | multi_pose '
                              '| tracking or combined with ,')
+    self.parser.add_argument('--csv', type=int, default=2, 
+                             help='number of csv files')
+    self.parser.add_argument('--base_dir', default='/content/drive/MyDrive/CVCollection/models/SatelliteMapping/',
+                             help='base directory for CSV files and Map files')
     self.parser.add_argument('--dataset', default='coco',
                              help='see lib/dataset/dataset_facotry for ' + 
                             'available datasets')
