@@ -102,14 +102,9 @@ def get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z):
     return np.flip(roit, axis=1)
 
 
-def slope_calculator(x, y, pow=2):
+def slope_calculator(x, y):
     long_a, long_b = x[0], x[-1]
-    p = np.polyfit(x, y, pow)
-    slope = 0
-    lat_a, lat_b = 0, 0
-    for i in range(pow):
-        lat_a += p[i] * (long_a ** (pow - i))
-        lat_b += p[i] * (long_b ** (pow - i))
+    lat_a, lat_b = y[0], y[-1]
     dL = long_b - long_a
     X = np.cos(np.deg2rad(lat_b)) * np.sin(np.deg2rad(dL))
     Y = np.cos(np.deg2rad(lat_a)) * np.sin(np.deg2rad(lat_b)) - np.sin(np.deg2rad(lat_a)) \

@@ -90,7 +90,7 @@ def demo(opt):
     while True:
         if is_video:
             _, img = cam.read()
-            if img is None or cnt == cnt_max - opt.fpts - 1:
+            if img is None or cnt == cnt_max - opt.fpts:
                 save_and_exit(opt, out, results, out_name)
             img = undistort_image(img)
         else:
@@ -130,13 +130,17 @@ def demo(opt):
 
             # CHANGE: Added 'if' statement for Bird's Eye Transformation
             if opt.bev:
-                # Getting BEV
+                # Getting Slope
                 scale = 30
                 dst_x, dst_z = 1000, 2500
-                theta = slope_calculator(csv.loc[cnt-1:cnt+opt.fpts-1, 'longitude'].to_numpy(), 
-                                         csv.loc[cnt-1:cnt+opt.fpts-1, 'latitude'].to_numpy())
-                latitude, longitude = csvt.loc[cnt-1, 'latitude'], csvt.loc[cnt-1, 'longitude']
-                birdimage = get_patch(segmented_image, latitude, longitude, 180 + theta, dst_x, dst_z)
+                lon = csv.loc[cnt-1:cnt-1+opt.fpts, 'longitude'].to_numpy()
+                lat = csv.loc[cnt-1:cnt-1+opt.fpts, 'latitude'].to_numpy()
+                theta = 180 + slope_calculator(lon, lat)
+                
+                # Getting BEV Image
+                latitude = csvt.loc[cnt-1, 'latitude']
+                longitude = csvt.loc[cnt-1, 'longitude']
+                birdimage = get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z)
                 img = get_bev(results[cnt], opt, scale, birdimage)
 
                 # Writing to Video
@@ -155,17 +159,18 @@ def demo(opt):
                     out2 = cv2.VideoWriter('./results/{}_bev.avi'.format(
                         opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (vh, vw))
                     out2_init = True
+                
+                comb = cv2.resize(comb, (vh, vw))
                 out2.write(comb)
-                cv2.imwrite('./results/demo_{}.jpg'.format(cnt), comb)
 
             if not is_video:
                 cv2.imwrite('./results/demo{}.jpg'.format(cnt), ret['generic'])
-
+        
         # esc to quit and finish saving video
         if cv2.waitKey(1) == 27:
             save_and_exit(opt, out, results, out_name)
             return
-
+    
     out2.release()
     save_and_exit(opt, out, results)
 
