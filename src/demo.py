@@ -22,17 +22,6 @@ video_ext = ['mp4', 'mov', 'avi', 'mkv']
 time_stats = ['tot', 'load', 'pre', 'net', 'dec', 'post', 'merge', 'display']
 
 
-def slope_calculator(x, y, pow=2):
-    x, y = x - x[0], y - y[0]
-    p = np.polyfit(x, y, pow)
-    slope = 0
-    y1, y2 = 0, 0
-    for i in range(pow):
-        y1 += p[i] * (x[0] ** (pow - i))
-        y2 += p[i] * (x[-1] ** (pow - i))
-    return 90 - np.rad2deg(np.arctan2(y2 - y1, x[0] - x[-1]))
-
-
 def demo(opt):
     base_dir = '/content/CenterTrack/src/'
     os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus_str
@@ -96,7 +85,7 @@ def demo(opt):
     cnt = 0
     cnt_max = csv.shape[0]
     results = {}
-    out2 = None
+    out2_init = False
 
     while True:
         if is_video:
@@ -152,23 +141,22 @@ def demo(opt):
 
                 # Writing to Video
                 rows_rgb, cols_rgb, channels = ret['generic'].shape
+                img = image_resize(img, height = rows_rgb)
                 rows_gray, cols_gray, _ = img.shape
                 rows_comb = max(rows_rgb, rows_gray)
-                if rows_rgb > rows_gray:
-                    img = img.reshape(rows_rgb, cols_gray, -1)
-                elif rows_rgb < rows_gray:
-                    ret['generic'] = ret['generic'].reshape(rows_gray, cols_rgb, -1)
                 cols_comb = cols_rgb + cols_gray
                 comb = np.zeros(shape=(rows_comb, cols_comb, channels), dtype=np.uint8)
-                comb[:, :cols_rgb] = ret['generic']
-                comb[:, cols_rgb:] = img
-                cv2.write('./results/{}_bev.avi'.format(cnt), comb)
-                if out2 is None:
+                comb[:rows_rgb, :cols_rgb] = ret['generic']
+                comb[:rows_gray, cols_rgb:] = img
+
+                if not out2_init:
                     vw, vh = comb.shape[0], comb.shape[1]
                     fourcc = cv2.VideoWriter_fourcc(*'MJPG')
                     out2 = cv2.VideoWriter('./results/{}_bev.avi'.format(
                         opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (vh, vw))
+                    out2_init = True
                 out2.write(comb)
+                cv2.imwrite('./results/demo_{}.jpg'.format(cnt), comb)
 
             if not is_video:
                 cv2.imwrite('./results/demo{}.jpg'.format(cnt), ret['generic'])
