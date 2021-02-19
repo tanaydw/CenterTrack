@@ -22,12 +22,15 @@ video_ext = ['mp4', 'mov', 'avi', 'mkv']
 time_stats = ['tot', 'load', 'pre', 'net', 'dec', 'post', 'merge', 'display']
 
 
-def slope_calculator(x, y, pow=3):
+def slope_calculator(x, y, pow=2):
+    x, y = x - x[0], y - y[0]
     p = np.polyfit(x, y, pow)
     slope = 0
+    y1, y2 = 0, 0
     for i in range(pow):
-        slope += (pow - i) * p[i] * (x[0] ** (pow - i - 1))
-    return np.rad2deg(np.arctan(slope))
+        y1 += p[i] * (x[0] ** (pow - i))
+        y2 += p[i] * (x[-1] ** (pow - i))
+    return 90 - np.rad2deg(np.arctan2(y2 - y1, x[0] - x[-1]))
 
 
 def demo(opt):
@@ -93,6 +96,7 @@ def demo(opt):
     cnt = 0
     cnt_max = csv.shape[0]
     results = {}
+    out2 = None
 
     while True:
         if is_video:
@@ -140,28 +144,31 @@ def demo(opt):
                 # Getting BEV
                 scale = 30
                 dst_x, dst_z = 1000, 2500
-                theta = 90 - slope_calculator(csv.loc[cnt:cnt+opt.fpts, 'longitude'].to_numpy(), csv.loc[cnt:cnt+opt.fpts, 'latitude'].to_numpy(), pow=opt.fpts)
-                latitude, longitude = csv.loc[cnt-1, 'latitude'], csv.loc[cnt-1, 'longitude']
-                birdimage = get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z)
+                theta = slope_calculator(csv.loc[cnt-1:cnt+opt.fpts-1, 'longitude'].to_numpy(), 
+                                         csv.loc[cnt-1:cnt+opt.fpts-1, 'latitude'].to_numpy())
+                latitude, longitude = csvt.loc[cnt-1, 'latitude'], csvt.loc[cnt-1, 'longitude']
+                birdimage = get_patch(segmented_image, latitude, longitude, 180 + theta, dst_x, dst_z)
                 img = get_bev(results[cnt], opt, scale, birdimage)
 
                 # Writing to Video
                 rows_rgb, cols_rgb, channels = ret['generic'].shape
                 rows_gray, cols_gray, _ = img.shape
                 rows_comb = max(rows_rgb, rows_gray)
+                if rows_rgb > rows_gray:
+                    img = img.reshape(rows_rgb, cols_gray, -1)
+                elif rows_rgb < rows_gray:
+                    ret['generic'] = ret['generic'].reshape(rows_gray, cols_rgb, -1)
                 cols_comb = cols_rgb + cols_gray
                 comb = np.zeros(shape=(rows_comb, cols_comb, channels), dtype=np.uint8)
-                comb[:rows_rgb, :cols_rgb] = ret['generic']
-                comb[:rows_gray, cols_rgb:] = img
-
-                try:
-                    out2.write(comb)
-                except:
+                comb[:, :cols_rgb] = ret['generic']
+                comb[:, cols_rgb:] = img
+                cv2.write('./results/{}_bev.avi'.format(cnt), comb)
+                if out2 is None:
                     vw, vh = comb.shape[0], comb.shape[1]
                     fourcc = cv2.VideoWriter_fourcc(*'MJPG')
                     out2 = cv2.VideoWriter('./results/{}_bev.avi'.format(
                         opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (vh, vw))
-                    out2.write(comb)
+                out2.write(comb)
 
             if not is_video:
                 cv2.imwrite('./results/demo{}.jpg'.format(cnt), ret['generic'])
