@@ -13,20 +13,15 @@ class opts(object):
     self.parser.add_argument('task', default='',
                              help='ctdet | ddd | multi_pose '
                              '| tracking or combined with ,')
-    self.parser.add_argument('--csv', type=int, default=2, 
-                             help='number of csv files')
     self.parser.add_argument('--fpts', type=int, default=10, 
                              help='number of future points')
-    self.parser.add_argument('--base_dir', default='/content/drive/MyDrive/CVCollection/models/SatelliteMapping/',
-                             help='base directory for CSV files and Map files')
-    self.parser.add_argument('--dataset', default='coco',
+    self.parser.add_argument('--dataset', default='nuscenes',
                              help='see lib/dataset/dataset_facotry for ' + 
                             'available datasets')
     self.parser.add_argument('--test_dataset', default='',
                              help='coco | kitti | coco_hp | pascal')
     self.parser.add_argument('--exp_id', default='default')
     self.parser.add_argument('--test', action='store_true')
-    self.parser.add_argument('--bev', action='store_true')
     self.parser.add_argument('--debug', type=int, default=0,
                              help='level of visualization.'
                                   '1: only show the final detection results'

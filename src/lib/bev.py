@@ -12,50 +12,6 @@ from skimage import morphology
 from scipy.ndimage import rotate
 
 
-def get_segmented_map(img):
-    segmented_image = np.zeros(img.shape, dtype=np.uint8)
-    # Defining background color = (254, 204, 165)
-    segmented_image[:, :, 0] = 254
-    segmented_image[:, :, 1] = 204
-    segmented_image[:, :, 2] = 165
-    # Segmenting Road (255, 255, 255)
-    road_mask = (img[:, :, 0] == 255) & (img[:, :, 1] == 255) & (img[:, :, 2] == 255)
-    segmented_image[road_mask, 0] = 219
-    segmented_image[road_mask, 1] = 108
-    segmented_image[road_mask, 2] = 115
-    # Segmenting Buildings (241, 241, 241)
-    build_mask = (img[:, :, 0] == 241) & (img[:, :, 1] == 241) & (img[:, :, 2] == 241)
-    """n_opt = 3
-    for _ in range(n_opt):
-        build_mask = morphology.binary_erosion(build_mask)
-    for _ in range(n_opt):
-        build_mask = morphology.binary_dilation(build_mask)"""
-    segmented_image[build_mask, 0] = 254
-    segmented_image[build_mask, 1] = 137
-    segmented_image[build_mask, 2] = 9
-    return segmented_image
-
-
-def get_map_vectors(p1, p2, img):
-    u1, v1 = 0, 0
-    u2, v2 = img.shape[1], img.shape[0]
-    lat1, long1 = p1
-    lat2, long2 = p2
-    scale_u = (long1 - long2) / (u1 - u2)
-    scale_v = (lat1 - lat2) / (v1 - v2)
-    lat_org = lat1 - scale_v * v1
-    long_org = long1 - scale_u * u1
-    return lat_org, long_org, scale_u, scale_v
-
-
-def get_u(x, long_org, scale_u):
-    return int((x - long_org) / scale_u)
-
-
-def get_v(x, lat_org, scale_v):
-    return int((x - lat_org) / scale_v)
-
-
 def autocrop(image, threshold=0):
     """
     Crops any edges below or equal to threshold

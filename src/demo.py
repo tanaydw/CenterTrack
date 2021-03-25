@@ -13,7 +13,6 @@ import numpy as np
 from opts import opts
 from detector import Detector
 
-from bev import *
 import warnings
 warnings.simplefilter('ignore', np.RankWarning)
 
@@ -23,13 +22,15 @@ time_stats = ['tot', 'load', 'pre', 'net', 'dec', 'post', 'merge', 'display']
 
 
 def demo(opt):
-    base_dir = '/content/CenterTrack/src/'
     os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus_str
     opt.debug = max(opt.debug, 1)
     detector = Detector(opt)
 
     if not os.path.exists('./results'):
         os.makedirs('./results')
+
+    if not os.path.exists('./metadata'):
+        os.makedirs('./metadata')
 
     if opt.demo == 'webcam' or \
         opt.demo[opt.demo.rfind('.') + 1:].lower() in video_ext:
@@ -49,26 +50,6 @@ def demo(opt):
         else:
             image_names = [opt.demo]
 
-    # Read Satellite Metadata
-    sat_img = cv2.cvtColor(cv2.imread(opt.base_dir + 'negley_map_2.png'), cv2.COLOR_BGR2RGB)
-    segmented_image = get_segmented_map(sat_img)
-
-    # MANUAL
-    p1 = (40.46984126496397, -79.93069034546637)
-    p2 = (40.46695644291853, -79.92597035690083)
-    lat_org, long_org, scale_u, scale_v = get_map_vectors(p1, p2, segmented_image)
-
-    csv_list = []
-    for i in range(opt.csv):
-        csv_list.append(pd.read_csv(opt.base_dir + '1_' + str(i+1) + '_all.csv', encoding = "ISO-8859-1")[['latitude', 'longitude']])
-    csv = pd.concat(csv_list)
-    csv.reset_index(drop=True, inplace=True)
-
-    # Transformation
-    csvt = csv.copy()
-    csvt['longitude'] = csvt['longitude'].apply(lambda x: get_u(x, long_org, scale_u))
-    csvt['latitude'] = csvt['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
-
     # Initialize output video
     out = None
     out_name = opt.demo[opt.demo.rfind('/') + 1:]
@@ -82,10 +63,9 @@ def demo(opt):
 
     if opt.debug < 5:
         detector.pause = False
+    
     cnt = 0
-    cnt_max = csv.shape[0]
     results = {}
-    out2_init = False
 
     while True:
         if is_video:
@@ -127,42 +107,6 @@ def demo(opt):
         # save debug image to video
         if opt.save_video:
             out.write(ret['generic'])
-
-            # CHANGE: Added 'if' statement for Bird's Eye Transformation
-            if opt.bev:
-                # Getting Slope
-                scale = 30
-                dst_x, dst_z = 1000, 2500
-                lon = csv.loc[cnt-1:cnt-1+opt.fpts, 'longitude'].to_numpy()
-                lat = csv.loc[cnt-1:cnt-1+opt.fpts, 'latitude'].to_numpy()
-                theta = 180 + slope_calculator(lon, lat)
-                
-                # Getting BEV Image
-                latitude = csvt.loc[cnt-1, 'latitude']
-                longitude = csvt.loc[cnt-1, 'longitude']
-                birdimage = get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z)
-                img = get_bev(results[cnt], opt, scale, birdimage)
-
-                # Writing to Video
-                rows_rgb, cols_rgb, channels = ret['generic'].shape
-                img = image_resize(img, height = rows_rgb)
-                rows_gray, cols_gray, _ = img.shape
-                rows_comb = max(rows_rgb, rows_gray)
-                cols_comb = cols_rgb + cols_gray
-                comb = np.zeros(shape=(rows_comb, cols_comb, channels), dtype=np.uint8)
-                comb[:rows_rgb, :cols_rgb] = ret['generic']
-                comb[:rows_gray, cols_rgb:] = img
-
-                if not out2_init:
-                    vw, vh = comb.shape[0], comb.shape[1]
-                    fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-                    out2 = cv2.VideoWriter('./results/{}_bev.avi'.format(
-                        opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (vh, vw))
-                    out2_init = True
-                
-                comb = cv2.resize(comb, (vh, vw))
-                out2.write(comb)
-
             if not is_video:
                 cv2.imwrite('./results/demo{}.jpg'.format(cnt), ret['generic'])
         
@@ -171,16 +115,14 @@ def demo(opt):
             save_and_exit(opt, out, results, out_name)
             return
     
-    out2.release()
     save_and_exit(opt, out, results)
 
 
-def save_and_exit(opt, out=None, results=None, out_name=''):
-    if opt.save_results and (results is not None):
-        save_dir = './results/{}_results.json'.format(opt.exp_id + '_' + out_name)
+def save_and_exit(opt, out=None, results=None, out_name='demo'):
+    if results is not None:
+        save_dir = './metadata/{}_results.json'.format(opt.exp_id + '_' + out_name)
         print('saving results to', save_dir)
-        json.dump(_to_list(copy.deepcopy(results)),
-                  open(save_dir, 'w'))
+        json.dump(_to_list(copy.deepcopy(results)), open(save_dir, 'w'))
     if opt.save_video and out is not None:
         out.release()
     sys.exit(0)
