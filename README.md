@@ -129,6 +129,10 @@ After following the above steps, run the command below to for inference results:
 python src/inference_car_b.py
 ```
 
+The final output should look something like this:-
+
+<p align="center"> <img src='images/final_output.gif' align="center" height="230px"> </p>
+
 ## Training CenterTrack
 
 CenterTrack is the primary 3D object detection algorithm that we have used in this project. The weights provided by us are pre-trained on NuScenes dataset on which we have done transfer learning using CARLA simulator for 10 more epochs. It can be further trained and fine-tuned as and when required. We refer you to original source of [CenterTrack](https://github.com/xingyizhou/CenterTrack) for training steps. Once the model is trained, the final weights can be used with this project for transferring metadata and recreating the scene.    
