@@ -25,7 +25,9 @@ Please refer to [INSTALL.ipynb](INSTALL.ipynb) notebook for installation instruc
 
 ## Inference
 
-Please refer to [Inference.ipynb](Inference.ipynb) notebook for running the code on a video/image. A sample code is shown in the notebook for demo purpose as well.
+Please refer to [INFERENCE_CAR_A.ipynb](INFERENCE_CAR_A.ipynb) notebook for running the object detection inference code on a video/image. This notebook performs the Step 1 (Car A) explained in the introduction.
+
+For running the scene recreation script, please refer to [INFERENCE_CAR_B.ipynb](INFERENCE_CAR_B.ipynb). This notebook performs the Step 2 (Car B) explained in the introduction.
 
 
 ## Training CenterTrack
