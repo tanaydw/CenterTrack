@@ -12,6 +12,7 @@ import copy
 import numpy as np
 from opts import opts
 from detector import Detector
+from bev import *
 
 import warnings
 warnings.simplefilter('ignore', np.RankWarning)
