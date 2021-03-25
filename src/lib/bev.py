@@ -138,8 +138,8 @@ def compute_birdviewbox(info_dict, shape, scale):
     R = np.array([[-np.cos(rot_y), np.sin(rot_y)],
                   [np.sin(rot_y), np.cos(rot_y)]])
     t = np.array([x, z]).reshape(1, 2).T
-    x_corners = [0, l, l, 0]  # -l/2
-    z_corners = [w, w, 0, 0]  # -w/2
+    x_corners = np.array([0, l, l, 0])  # -l/2
+    z_corners = np.array([w, w, 0, 0])  # -w/2
     x_corners += -w / 2
     z_corners += -l / 2
     # bounding box in object coordinate

@@ -27,7 +27,7 @@ def demo(opt):
         os.makedirs('./results')
 
     # Read Satellite Metadata
-    sat_img = cv2.cvtColor(cv2.imread(opt.map), cv2.COLOR_BGR2RGB)
+    sat_img = cv2.cvtColor(cv2.imread(opt.base_dir + opt.map), cv2.COLOR_BGR2RGB)
     segmented_image = get_segmented_map(sat_img)
 
     # Setting GPS coordinates
@@ -47,7 +47,8 @@ def demo(opt):
     csvt['latitude'] = csvt['latitude'].apply(lambda x: get_v(x, lat_org, scale_v))
 
     # Loading metadata
-    results = json.load('./metadata/{}_results.json'.format(opt.exp_id + '_' + opt.json_name))
+    with open('metadata/{}_results.json'.format(opt.exp_id + '_' + opt.json_name)) as json_file:
+        results = json.load(json_file)
 
     cnt = 0
     cnt_max = csv.shape[0]
@@ -77,7 +78,7 @@ def demo(opt):
             latitude = csvt.loc[cnt-1, 'latitude']
             longitude = csvt.loc[cnt-1, 'longitude']
             birdimage = get_patch(segmented_image, latitude, longitude, theta, dst_x, dst_z)
-            img = get_bev(results[cnt], opt, scale, birdimage)
+            img = get_bev(results[str(cnt)], opt, scale, birdimage)
 
             if not out2_init:
                 vw, vh = img.shape[0], img.shape[1]
@@ -88,6 +89,7 @@ def demo(opt):
             
             comb = cv2.resize(img, (vh, vw))
             out2.write(comb)
+            print('Processed Frame :' + str(cnt))
 
     out2.release()
 

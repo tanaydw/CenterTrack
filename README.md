@@ -126,7 +126,10 @@ The code below executes the second step, i.e. it recreates the scene from metada
 After following the above steps, run the command below to for inference results:-
 
 ```
-python src/inference_car_b.py
+!python src/inference_car_b.py tracking,ddd \
+    --save_framerate 10 \                             # FPS of output video
+    --save_video \                                    # Option to save the video or not
+    --skip_first 720                                  # How many frames to skip at the beginning
 ```
 
 The final output should look something like this:-
