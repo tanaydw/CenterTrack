@@ -53,13 +53,13 @@ def demo(opt):
 
     # Initialize output video
     out = None
-    out_name = opt.demo[opt.demo.rfind('/') + 1:]
+    out_name = ''
     print('out_name', out_name)
     if opt.save_video:
         # fourcc = cv2.VideoWriter_fourcc(*'XVID')
         fourcc = cv2.VideoWriter_fourcc(*'MJPG')
         out = cv2.VideoWriter('./results/{}.avi'.format(
-            opt.exp_id + '_' + out_name), fourcc, opt.save_framerate, (
+            opt.exp_id + '_' + out_name + 'detection'), fourcc, opt.save_framerate, (
             opt.video_w, opt.video_h))
 
     if opt.debug < 5:
@@ -72,13 +72,13 @@ def demo(opt):
         if is_video:
             _, img = cam.read()
             if img is None:
-                save_and_exit(opt, out, results, out_name)
+                save_and_exit(opt, out, results)
             img = undistort_image(img)
         else:
             if cnt < len(image_names):
                 img = cv2.imread(image_names[cnt])
             else:
-                save_and_exit(opt, out, results, out_name)
+                save_and_exit(opt, out, results)
         cnt += 1
 
         # resize the original video for saving video results
@@ -119,7 +119,7 @@ def demo(opt):
     save_and_exit(opt, out, results)
 
 
-def save_and_exit(opt, out=None, results=None, out_name='demo'):
+def save_and_exit(opt, out=None, results=None, out_name='metadata'):
     if results is not None:
         save_dir = './metadata/{}_results.json'.format(opt.exp_id + '_' + out_name)
         print('saving results to', save_dir)

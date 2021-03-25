@@ -254,6 +254,16 @@ class opts(object):
     self.parser.add_argument('--custom_dataset_img_path', default='')
     self.parser.add_argument('--custom_dataset_ann_path', default='')
 
+    # BEV
+    self.parser.add_argument('--map', default='satmap/negley_map.png')
+    self.parser.add_argument('--json_name', default='metadata')
+    self.parser.add_argument('--map_lat_top', type=float, default=40.46984126496397)
+    self.parser.add_argument('--map_lon_top', type=float, default=-79.93069034546637)
+    self.parser.add_argument('--map_lat_bot', type=float, default=40.46695644291853)
+    self.parser.add_argument('--map_lon_bot', type=float, default=-79.92597035690083)
+    self.parser.add_argument('--csv', type=int, default=3)
+    self.parser.add_argument('--fpts', type=int, default=10)
+
   def parse(self, args=''):
     if args == '':
       opt = self.parser.parse_args()
