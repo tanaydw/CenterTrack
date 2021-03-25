@@ -70,7 +70,7 @@ def demo(opt):
     while True:
         if is_video:
             _, img = cam.read()
-            if img is None or cnt == cnt_max - opt.fpts:
+            if img is None:
                 save_and_exit(opt, out, results, out_name)
             img = undistort_image(img)
         else:

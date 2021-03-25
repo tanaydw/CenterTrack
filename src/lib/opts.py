@@ -13,8 +13,6 @@ class opts(object):
     self.parser.add_argument('task', default='',
                              help='ctdet | ddd | multi_pose '
                              '| tracking or combined with ,')
-    self.parser.add_argument('--fpts', type=int, default=10, 
-                             help='number of future points')
     self.parser.add_argument('--dataset', default='nuscenes',
                              help='see lib/dataset/dataset_facotry for ' + 
                             'available datasets')
